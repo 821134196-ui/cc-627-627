@@ -1,0 +1,18 @@
+{
+  "name": "tasting-sample-allergen-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "门店商品试吃样品制作与过敏告知系统（NestJS + React + Prisma/SQLite）",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "setup": "npm install && npm run db:push -w backend && npm run seed -w backend",
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev -w backend\" \"npm:dev -w frontend\"",
+    "check": "npm run check -w backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

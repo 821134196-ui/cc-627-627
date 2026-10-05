@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite 不支持 enum，取值在 src/domain/enums.ts 以常量约束：
+// StaffRole     = MAKER | INSPECTOR | SERVER
+// SampleStatus  = PENDING_INSPECTION | READY | STOPPED
+// StopReason    = PRINT_FAILED | INSPECTION_FAILED | EXPIRED | RECALLED | MANUAL
+
+model Staff {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  role      String
+  createdAt DateTime  @default(now())
+  samplesMade     Sample[]             @relation("MakerSamples")
+  inspections     Inspection[]
+  distributions   DistributionRecord[]
+}
+
+model IngredientBatch {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  name         String
+  supplier     String?
+  allergens    String    // JSON 字符串数组，例如 ["乳制品","坚果"]
+  receivedAt   DateTime  @default(now())
+  recalled     Boolean   @default(false)
+  recalledAt   DateTime?
+  recallReason String?
+  samples      Sample[]
+  recallNotices RecallNotice[]
+}
+
+model Sample {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  batchId          String
+  batch            IngredientBatch @relation(fields: [batchId], references: [id])
+  // 制作时从原料批次复制的过敏原快照，告知牌按此打印；换批次必须新建样品
+  allergenSnapshot String
+  madeAt           DateTime @default(now())
+  serveUntil       DateTime
+  makerId          String
+  maker            Staff    @relation("MakerSamples", fields: [makerId], references: [id])
+  status           String   @default("PENDING_INSPECTION")
+  stopReason       String?
+  stopNote         String?
+  stoppedAt        DateTime?
+  createdAt        DateTime @default(now())
+
+  printJob     PrintJob?
+  inspection   Inspection?
+  distributions DistributionRecord[]
+
+  @@index([status])
+  @@index([batchId])
+}
+
+model PrintJob {
+  id          String   @id @default(cuid())
+  sampleId    String   @unique
+  sample      Sample   @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  success     Boolean
+  content     String   // 告知牌文本
+  error       String?
+  attemptedAt DateTime @default(now())
+}
+
+model Inspection {
+  id          String   @id @default(cuid())
+  sampleId    String   @unique
+  sample      Sample   @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  inspectorId String
+  inspector   Staff    @relation(fields: [inspectorId], references: [id])
+  passed      Boolean
+  note        String?
+  checkedAt   DateTime @default(now())
+}
+
+model DistributionRecord {
+  id               String   @id @default(cuid())
+  sampleId         String
+  sample           Sample   @relation(fields: [sampleId], references: [id])
+  // 发放时的快照：样品停止或批次召回后记录仍保留，可凭批次号追溯
+  sampleCode       String
+  batchCode        String
+  allergenSnapshot String
+  quantity         Int      @default(1)
+  customerNote     String?
+  serverId         String
+  server           Staff    @relation(fields: [serverId], references: [id])
+  distributedAt    DateTime @default(now())
+
+  @@index([batchCode])
+  @@index([sampleId])
+}
+
+model RecallNotice {
+  id                  String   @id @default(cuid())
+  batchId             String
+  batch               IngredientBatch @relation(fields: [batchId], references: [id])
+  batchCode           String
+  reason              String
+  affectedSampleCount Int      @default(0)
+  channel             String   @default("LOCAL_FILE") // 本地模拟通知渠道
+  createdAt           DateTime @default(now())
+}

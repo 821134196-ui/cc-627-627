@@ -1,15 +1,15 @@
-.env
-.env.*
-!.env.example
+# 依赖
 node_modules/
-.venv/
-__pycache__/
-target/
+
+# Prisma / SQLite
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/data/
+
+# 构建产物
 dist/
 build/
-*.log
-.claude/
-.cc-workbench/
-轨迹/
-录屏/
-视频/
+
+# 环境
+.env
+.env.*
