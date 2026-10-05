@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dist-test/
+prisma/*.db
+prisma/*.db-journal
+test-server.log

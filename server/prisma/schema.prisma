@@ -1,0 +1,91 @@
+// 试吃样品与过敏告知系统 —— SQLite 数据模型
+// 追溯链路：原料批次 MaterialBatch 1—N 样品 Sample 1—N 发放记录 DistributionRecord
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 原料批次（召回追查的起点）
+model MaterialBatch {
+  id           String   @id @default(cuid())
+  name         String // 原料名称，如“全脂牛奶”
+  batchNo      String   @unique // 批次号，如 B-MILK-261001
+  supplier     String? // 供应商
+  allergens    String // 该原料含有的过敏原 JSON 数组，如 ["乳"]
+  receivedAt   DateTime @default(now())
+  recalled     Boolean  @default(false)
+  recalledAt   DateTime?
+  recallReason String?
+  samples      Sample[]
+
+  @@map("material_batches")
+}
+
+/// 试吃样品（一个样品唯一对应一个原料批次 + 一张告知牌）
+model Sample {
+  id               String   @id @default(cuid())
+  code             String   @unique // 样品编号 S-YYYYMMDD-001
+  name             String // 试吃品名称，如“奶香曲奇试吃杯”
+  materialBatchId  String
+  materialBatch    MaterialBatch @relation(fields: [materialBatchId], references: [id])
+  preparedAt       DateTime @default(now())
+  serveDeadline    DateTime // 发放截止时间，过期自动停止
+  preparedBy       String // 制作经手人
+  // —— 告知牌内容（打印时固化，不允许事后编辑让样品“复活”）——
+  labelAllergens   String // 告知牌标注过敏原 JSON 数组
+  labelNote        String? // 告知牌备注（交叉污染提示等）
+  // —— 状态机 ——
+  status           String   @default("PENDING_PRINT") // 见 domain.ts SampleStatus
+  printStatus      String   @default("NONE") // NONE / SUCCESS / FAILED
+  printedAt        DateTime?
+  printError       String?
+  reviewedAt       DateTime?
+  reviewedBy       String? // 巡查经手人
+  reviewNote       String?
+  stopReason       String? // PRINT_FAILED / EXPIRED / ALLERGEN_ERROR / BATCH_RECALL
+  stoppedAt        DateTime?
+  stopNote         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  distributions    DistributionRecord[]
+
+  @@index([materialBatchId])
+  @@index([status])
+  @@map("samples")
+}
+
+/// 发放记录（样品停止/批次召回后依然保留，用于追查）
+model DistributionRecord {
+  id            String   @id @default(cuid())
+  sampleId      String
+  sample        Sample   @relation(fields: [sampleId], references: [id])
+  quantity      Int      @default(1)
+  customer      String? // 领取人/桌号等备注，可空
+  distributedBy String // 发放经手人
+  distributedAt DateTime @default(now())
+  note          String?
+
+  @@index([sampleId])
+  @@map("distribution_records")
+}
+
+/// 站内通知（打印失败、到期停止、召回等，本地模拟）
+model Notification {
+  id         String   @id @default(cuid())
+  type       String // PRINT_SUCCESS / PRINT_FAILED / REVIEW_PASSED / STOPPED / RECALL
+  severity   String   @default("info") // info / warn / danger
+  title      String
+  body       String
+  refBatchId String?
+  refSampleId String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([read])
+  @@map("notifications")
+}
